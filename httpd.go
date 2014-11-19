@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/oauth2"
@@ -147,7 +148,7 @@ func newVirtualHostReverseProxy(backends []Backend) http.Handler {
 		req.Header.Set(BackendHostHeader, req.URL.Host)
 		log.Println("backend url", req.URL.String())
 	}
-	return &httputil.ReverseProxy{Director: director}
+	return &httputil.ReverseProxy{Director: director, FlushInterval: 500 * time.Millisecond}
 }
 
 func isWebsocket(r *http.Request) bool {
