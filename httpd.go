@@ -192,8 +192,6 @@ func proxyHandleWrapper(handler http.Handler) http.Handler {
 				log.Printf("Hijack error: %v", err)
 				return
 			}
-			defer nc.Close()
-			defer d.Close()
 
 			err = r.Write(d)
 			if err != nil {
@@ -202,9 +200,10 @@ func proxyHandleWrapper(handler http.Handler) http.Handler {
 			}
 
 			errc := make(chan error, 2)
-			cp := func(dst io.Writer, src io.Reader) {
+			cp := func(dst io.WriteCloser, src io.ReadCloser) {
 				_, err := io.Copy(dst, src)
 				errc <- err
+				dst.Close()
 			}
 			go cp(d, nc)
 			go cp(nc, d)
