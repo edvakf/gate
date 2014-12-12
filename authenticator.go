@@ -3,13 +3,14 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/go-martini/martini"
-	gooauth2 "github.com/golang/oauth2"
-	"github.com/martini-contrib/oauth2"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
+
+	"github.com/go-martini/martini"
+	gooauth2 "github.com/golang/oauth2"
+	"github.com/martini-contrib/oauth2"
 )
 
 type Authenticator interface {
@@ -21,19 +22,21 @@ func NewAuthenticator(conf *Conf) Authenticator {
 	var authenticator Authenticator
 
 	if conf.Auth.Info.Service == "google" {
-		handler := oauth2.Google(&gooauth2.Options{
-			ClientID:     conf.Auth.Info.ClientId,
-			ClientSecret: conf.Auth.Info.ClientSecret,
-			RedirectURL:  conf.Auth.Info.RedirectURL,
-			Scopes:       []string{"email"},
+		handler := oauth2.Google(func(opt *gooauth2.Options) error {
+			opt.ClientID = conf.Auth.Info.ClientId
+			opt.ClientSecret = conf.Auth.Info.ClientSecret
+			opt.RedirectURL = conf.Auth.Info.RedirectURL
+			opt.Scopes = []string{"email"}
+			return nil
 		})
 		authenticator = &GoogleAuth{&BaseAuth{handler, conf}}
 	} else if conf.Auth.Info.Service == "github" {
-		handler := GithubGeneral(&gooauth2.Options{
-			ClientID:     conf.Auth.Info.ClientId,
-			ClientSecret: conf.Auth.Info.ClientSecret,
-			RedirectURL:  conf.Auth.Info.RedirectURL,
-			Scopes:       []string{"read:org"},
+		handler := GithubGeneral(func(opt *gooauth2.Options) error {
+			opt.ClientID = conf.Auth.Info.ClientId
+			opt.ClientSecret = conf.Auth.Info.ClientSecret
+			opt.RedirectURL = conf.Auth.Info.RedirectURL
+			opt.Scopes = []string{"read:org"}
+			return nil
 		}, conf)
 		authenticator = &GitHubAuth{&BaseAuth{handler, conf}}
 	} else {
@@ -44,11 +47,11 @@ func NewAuthenticator(conf *Conf) Authenticator {
 }
 
 // Currently, martini-contrib/oauth2 doesn't support github enterprise directly.
-func GithubGeneral(opts *gooauth2.Options, conf *Conf) martini.Handler {
+func GithubGeneral(opt gooauth2.Option, conf *Conf) martini.Handler {
 	authUrl := fmt.Sprintf("%s/login/oauth/authorize", conf.Auth.Info.Endpoint)
 	tokenUrl := fmt.Sprintf("%s/login/oauth/access_token", conf.Auth.Info.Endpoint)
 
-	return oauth2.NewOAuth2Provider(opts, authUrl, tokenUrl)
+	return oauth2.NewOAuth2Provider([]gooauth2.Option{opt, gooauth2.Endpoint(authUrl, tokenUrl)})
 }
 
 type BaseAuth struct {
@@ -65,14 +68,13 @@ type GoogleAuth struct {
 }
 
 func (a *GoogleAuth) Authenticate(domain []string, c martini.Context, tokens oauth2.Tokens, w http.ResponseWriter, r *http.Request) {
-	extra := tokens.ExtraData()
-	if _, ok := extra["id_token"]; ok == false {
+	if tokens.Extra("id_token") == "" {
 		log.Printf("id_token not found")
 		forbidden(w)
 		return
 	}
 
-	keys := strings.Split(extra["id_token"], ".")
+	keys := strings.Split(tokens.Extra("id_token"), ".")
 	if len(keys) < 2 {
 		log.Printf("invalid id_token")
 		forbidden(w)
